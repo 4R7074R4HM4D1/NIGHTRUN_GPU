@@ -229,16 +229,22 @@ name = "nr-boot"
 version = "0.1.0"
 dependencies = [
  "nr-gfx",
+ "nr-gpu",
  "nr-model",
  "nr-runtime",
  "nr-tensor",
  "nr-token",
  "nr-ui",
+ "rlibc",
  "uefi",
 ]
 
 [[package]]
 name = "nr-gfx"
+version = "0.1.0"
+
+[[package]]
+name = "nr-gpu"
 version = "0.1.0"
 
 [[package]]
@@ -353,6 +359,12 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "rlibc"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc874b127765f014d792f16763a81245ab80500e2ad921ed4ee9e82481ee08fe"
 
 [[package]]
 name = "rustversion"

@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+nr-gpu = { path = "../nr-gpu" }
+rlibc = "1.0"
 uefi = { version = "0.38", features = ["alloc", "global_allocator"] }
 nr-gfx = { path = "../nr-gfx" }
 nr-model = { path = "../nr-model", default-features = false }

@@ -29,6 +29,28 @@ impl Sampler {
         (x >> 40) as f32 / (1u64 << 24) as f32
     }
 
+    // NIGHTRUN_STAGE8E_GPU_SAMPLER_V1: UEFI owns RNG and final choice.
+    // GPU only returns ordered candidate IDs and unnormalized probability mass.
+    // No RNG state is advanced until all protocol data has been validated.
+    pub fn sample_prepared(&mut self, ids:&[u32;64], weights:&[f32;64],
+                           n:usize, mass:f32) -> Option<u32> {
+        if !(1..=64).contains(&n) || !mass.is_finite() || mass<=0.0 {return None;}
+        let mut sum=0.0f32;
+        for i in 0..n {
+            if !weights[i].is_finite() || weights[i]<0.0 {return None;}
+            if ids[..i].iter().any(|&id|id==ids[i]) {return None;}
+            sum+=weights[i];
+        }
+        if (sum-mass).abs() > 0.0001*mass.max(1.0) {return None;}
+        let r=self.next_f32()*mass;
+        let mut acc=0.0f32;
+        for i in 0..n {
+            acc+=weights[i];
+            if r<=acc {return Some(ids[i]);}
+        }
+        Some(ids[n-1])
+    }
+
     pub fn sample(&mut self, logits: &[f32]) -> u32 {
         if self.temperature <= 0.0 {
             return tvec::argmax(logits) as u32;

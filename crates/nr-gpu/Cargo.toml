@@ -1,0 +1,9 @@
+[package]
+name = "nr-gpu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "No-std GPU command ABI for NightRun firmware and CUDA research backends"
+
+[lib]
+path = "src/lib.rs"

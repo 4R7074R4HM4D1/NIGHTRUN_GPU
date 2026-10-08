@@ -4,11 +4,25 @@
 #![no_main]
 
 extern crate alloc;
+extern crate rlibc;
 
 #[macro_use]
 pub mod serial;
 mod app;
-#[cfg(target_arch = "aarch64")]
+#[cfg(target_arch = "x86_64")]
+mod gpu_poc;
+#[cfg(target_arch = "x86_64")]
+mod gpu_mlp;
+#[cfg(target_arch = "x86_64")]
+mod gpu_attention;
+#[cfg(target_arch = "x86_64")]
+mod gpu_layer;
+#[cfg(target_arch = "x86_64")]
+mod gpu_stack;
+#[cfg(target_arch = "x86_64")]
+mod gpu_resident;
+#[cfg(target_arch = "x86_64")]
+mod gpu_output;
 mod fan;
 mod input;
 mod modelload;
@@ -43,6 +57,16 @@ fn main() -> Status {
     let _ = uefi::boot::set_watchdog_timer(0, 0x1_0000, None);
     con_print("NightRun: watchdog off, probing CPU features\r\n");
     enable_simd();
+//#[cfg(target_arch = "x86_64")]
+//{
+  //  serial_println!("[gpu] starting CUDA bridge test");
+
+
+  //  serial_println!(
+    //    "[gpu] self-test complete: {}",
+      //  if passed { "PASS" } else { "FAIL" }
+//    );
+//}
     con_print("NightRun: bringing up framebuffer (GOP)\r\n");
 
     let display = video::init();

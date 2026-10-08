@@ -283,10 +283,40 @@ fn boot_sequence(
             CTX_LEN
         ),
     );
-    let infer = match InferCtx::new(model, CTX_LEN, &mut alloc_cb) {
+    let mut infer = match InferCtx::new(model, CTX_LEN, &mut alloc_cb) {
         Ok(i) => i,
         Err(e) => ui.fail(&alloc::format!("inference init failed: {e:?}")),
     };
+    #[cfg(target_arch = "x86_64")]
+    {
+        if false /* Stage 8C: disable legacy Python classifier */ {
+            serial_println!("[gpu-output] classifier offload ACTIVE");
+        } else {
+            serial_println!("[gpu-output] CPU classifier selected");
+        }
+    }
+    // Stage 3 PCI command-buffer proof; existing inference remains unchanged.
+    #[cfg(target_arch = "x86_64")]
+    crate::gpu_poc::run(&infer);
+
+    // Stage 5B: register and verify ALL model tensors in RTX VRAM first.
+    #[cfg(target_arch = "x86_64")]
+    crate::gpu_resident::upload(&infer);
+
+    // Attach real layer-0 MLP using resident tensor IDs 261..264.
+    // If VRAM residency fails, the existing CPU inference path remains active.
+    #[cfg(target_arch = "x86_64")]
+    // Stage 6B: prefer one complete resident GPU layer. Otherwise retain
+    // the proven Stage 6A GPU attention + Stage 5B GPU MLP path.
+    // Stage 7 first: all 16 UEFI-authored layers in one GPU submission.
+    // No Stage 6B/6A path attaches unless Stage 7 initialization fails.
+    if !crate::gpu_stack::attach(&mut infer) {
+        if !crate::gpu_layer::attach(&mut infer) {
+            crate::gpu_mlp::attach(&mut infer);
+            crate::gpu_attention::attach(&mut infer);
+        }
+    }
+
     let sampler = Sampler::new(0.7, 0.9, nr_runtime::clock::rdtsc());
     ui.show(3, 1000, "inference engine ready");
 
@@ -525,6 +555,8 @@ fn generate(
         ids.len() as u64 * 1000 / prefill_ms.max(1)
     );
 
+    // Do not include classifier execution during prefill in decode timings.
+    p.infer.reset_cpu_classifier_profile();
     // Generation loop.
     let t0 = p.clock.now();
     let mut produced = 0u64;
@@ -534,7 +566,15 @@ fn generate(
     // sample/forward until a stop token, budget, or ESC.
     let mut next = {
         let logits = p.infer.logits();
-        p.sampler.sample(logits)
+        {
+            // NIGHTRUN_STAGE8E_GPU_SAMPLER_V1. Same UEFI RNG as the CPU sampler.
+            // Fail closed to the original CPU distribution if GPU preparation fails.
+            #[cfg(target_arch="x86_64")]
+            let prepared=crate::gpu_stack::try_sample(&mut p.sampler,logits);
+            #[cfg(not(target_arch="x86_64"))]
+            let prepared:Option<u32>=None;
+            match prepared {Some(id)=>id,None=>p.sampler.sample(logits)}
+        }
     };
     while !p.tokenizer.is_stop(next) && produced < MAX_GEN_TOKENS as u64 && p.infer.remaining() > 0
     {
@@ -552,7 +592,15 @@ fn generate(
         }
 
         let logits = p.infer.forward(next);
-        next = p.sampler.sample(logits);
+        next = {
+            // NIGHTRUN_STAGE8E_GPU_SAMPLER_V1. Same UEFI RNG as the CPU sampler.
+            // Fail closed to the original CPU distribution if GPU preparation fails.
+            #[cfg(target_arch="x86_64")]
+            let prepared=crate::gpu_stack::try_sample(&mut p.sampler,logits);
+            #[cfg(not(target_arch="x86_64"))]
+            let prepared:Option<u32>=None;
+            match prepared {Some(id)=>id,None=>p.sampler.sample(logits)}
+        };
     }
     // Keep the template consistent for the next turn.
     if p.tokenizer.is_stop(next) && p.infer.remaining() > 0 {
@@ -565,6 +613,17 @@ fn generate(
         produced,
         gen_ms,
         rate
+    );
+    #[cfg(target_arch = "x86_64")]
+    serial_println!("[gen] gpu_output_active={}", p.infer.gpu_classifier_active());
+    // Report only after generation: serial logging never runs in the hot path.
+    let (calls, total_ticks, max_ticks) = p.infer.cpu_classifier_profile();
+    let total_us = p.clock.ticks_to_ms(total_ticks.saturating_mul(1000));
+    let max_us = p.clock.ticks_to_ms(max_ticks.saturating_mul(1000));
+    let avg_us = if calls > 0 { total_us / calls } else { 0 };
+    serial_println!(
+        "[cpu-classifier] calls={} total_us={} avg_us={} max_us={}",
+        calls, total_us, avg_us, max_us
     );
     if turns.last().map(|t| t.text.is_empty()).unwrap_or(false) {
         turns.last_mut().unwrap().text = String::from("(no output)");

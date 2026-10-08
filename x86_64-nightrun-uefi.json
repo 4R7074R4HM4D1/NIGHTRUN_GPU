@@ -22,6 +22,7 @@
   "lld-flavor": "link",
   "llvm-target": "x86_64-unknown-windows",
   "max-atomic-width": 64,
+  "no-builtins": true,
   "metadata": {
     "description": "64-bit UEFI",
     "host_tools": false,
@@ -43,7 +44,6 @@
       "/subsystem:efi_application"
     ]
   },
-  "rustc-abi": "softfloat",
   "singlethread": true,
   "split-debuginfo": "packed",
   "stack-probes": {
